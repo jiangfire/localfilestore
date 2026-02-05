@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "bundle": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "bundle": "ncc build src/index.ts -o dist --minify --source-map --license licenses.txt",
     "dev:server": "ts-node src/index.ts server",
     "dev:client": "ts-node src/index.ts client",
     "start:server": "node dist/index.js server",
