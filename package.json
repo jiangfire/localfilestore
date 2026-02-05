@@ -1,0 +1,53 @@
+{
+  "name": "localfilestore",
+  "version": "1.0.0",
+  "description": "基于区块链的本地文件共享系统",
+  "main": "dist/index.js",
+  "bin": {
+    "localfilestore": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "bundle": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "dev:server": "ts-node src/index.ts server",
+    "dev:client": "ts-node src/index.ts client",
+    "start:server": "node dist/index.js server",
+    "start:client": "node dist/index.js client",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": [
+    "blockchain",
+    "p2p",
+    "file-sharing",
+    "distributed"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/eslint": "^9.6.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.1.0",
+    "@vercel/ncc": "^0.38.1",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "globals": "^17.3.0",
+    "jest": "^30.2.0",
+    "prettier": "^3.8.1",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
