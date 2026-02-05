@@ -2,13 +2,26 @@
 
 一个去中心化的本地文件注册与分发系统，采用类区块链技术维护文件账本，支持多节点P2P网络同步。
 
+[![CI](https://github.com/yourusername/localfilestore/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/localfilestore/actions/workflows/ci.yml)
+[![Tests](https://github.com/yourusername/localfilestore/actions/workflows/test.yml/badge.svg)](https://github.com/yourusername/localfilestore/actions/workflows/test.yml)
+
 ## 特性
 
 - 🔗 **区块链账本**: 使用工作量证明(PoW)维护不可篡改的文件注册记录
 - 🌐 **P2P网络**: 多节点自动同步账本，支持文件在节点间传输
-- 📦 **单文件分发**: 使用ncc打包成单个可执行文件，便于分发部署
+- 📦 **单文件分发**: 使用ncc打包成单个可执行文件（~33KB），便于分发部署
 - 🔍 **文件验证**: SHA-256哈希验证确保文件完整性
 - 📡 **RESTful API**: HTTP API便于客户端交互
+- ✅ **完整测试**: 使用 Jest 编写的单元测试覆盖核心功能
+
+## 快速下载
+
+从 [GitHub Actions Artifacts](https://github.com/yourusername/localfilestore/actions) 下载最新的 `index.js`：
+
+```bash
+# 下载后直接使用
+node index.js --help
+```
 
 ## 项目结构
 
@@ -20,14 +33,18 @@ localfilestore/
 │   ├── p2p.ts        # P2P网络模块
 │   ├── server.ts     # 服务器实现
 │   └── client.ts     # 客户端实现
+├── tests/
+│   └── blockchain.test.ts  # 单元测试
 ├── dist/
-│   └── index.js      # ncc打包后的单文件
+│   └── index.js      # ncc打包后的单文件(~33KB)
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
 ## 安装与构建
+
+### 从源码构建
 
 ```bash
 # 安装依赖
@@ -36,8 +53,27 @@ npm install
 # 编译TypeScript
 npm run build
 
-# 打包成单文件
+# 打包成单文件（已启用minify压缩）
 npm run bundle
+```
+
+### 运行测试
+
+```bash
+# 运行所有测试
+npm test
+
+# 监视模式运行测试
+npm run test:watch
+
+# 生成覆盖率报告
+npm run test:coverage
+
+# 代码检查
+npm run lint
+
+# 代码格式化
+npm run format
 ```
 
 ## 使用方法
@@ -203,6 +239,7 @@ node dist/index.js client verify <file-id> ./myfile.txt
 - 工作量证明难度: 2 (前缀2个0)
 - 区块结构: index, timestamp, data, previousHash, hash, nonce
 - **固定创世区块**: 所有节点使用相同的创世区块（时间戳固定为 2024-01-01 00:00:00 UTC），确保全网账本一致性
+- **安全挖矿**: 挖矿函数具有最大尝试次数限制（默认1000万），防止极端情况下的无限循环
 
 ### P2P网络
 
@@ -218,4 +255,4 @@ node dist/index.js client verify <file-id> ./myfile.txt
 
 ## 许可证
 
-MIT
+Apache 2.0
