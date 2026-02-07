@@ -1,14 +1,14 @@
 {
   "name": "localfilestore",
   "version": "1.0.0",
-  "description": "基于区块链的本地文件共享系统",
+  "description": "Blockchain-based local file sharing system",
   "main": "dist/index.js",
   "bin": {
     "localfilestore": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
-    "bundle": "ncc build src/index.ts -o dist --minify --source-map --license licenses.txt",
+    "bundle": "ncc build src/index.ts -o dist --minify --license licenses.txt",
     "dev:server": "ts-node src/index.ts server",
     "dev:client": "ts-node src/index.ts client",
     "start:server": "node dist/index.js server",

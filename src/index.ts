@@ -40,55 +40,55 @@ interface ErrorWithMessage {
  */
 function showHelp(): void {
   console.log(`
-📦 LocalFileStore - 基于区块链的本地文件共享系统
+📦 LocalFileStore - Blockchain-based local file sharing system
 
-用法:
+Usage:
   node index.js <command> [options]
 
-命令:
+Commands:
 
-  server                    启动区块链文件服务器
-    --http-port <port>      HTTP API端口 (默认: 3000)
-    --p2p-port <port>       P2P网络端口 (默认: 6000)
-    --data-dir <path>       数据存储目录 (默认: ./data)
-    --peers <list>          种子节点列表,格式: host:port,host:port
+  server                    Start blockchain file server
+    --http-port <port>      HTTP API port (default: 3000)
+    --p2p-port <port>       P2P network port (default: 6000)
+    --data-dir <path>       Data storage directory (default: ./data)
+    --peers <list>          Seed peer list, format: host:port,host:port
 
-  client                    启动客户端模式
-    --host <host>           服务器主机 (默认: localhost)
-    --port <port>           服务器端口 (默认: 3000)
-    --download-dir <path>   下载目录 (默认: ./downloads)
+  client                    Start client mode
+    --host <host>           Server host (default: localhost)
+    --port <port>           Server port (default: 3000)
+    --download-dir <path>   Download directory (default: ./downloads)
 
-  client list               列出所有注册的文件
+  client list               List all registered files
 
-  client register <path>    注册文件到区块链
-    --uploader <name>       上传者名称
-    --description <text>    文件描述
+  client register <path>    Register file to blockchain
+    --uploader <name>       Uploader name
+    --description <text>    File description
 
-  client download <fileId>  下载文件
-    --output <path>         输出路径 (默认: 下载目录)
+  client download <fileId>  Download file
+    --output <path>         Output path (default: download directory)
 
-  client chain              查看区块链信息
+  client chain              View blockchain information
 
-  client peers              查看连接的节点
+  client peers              View connected peers
 
-  client connect <host:port> 连接到新节点
+  client connect <host:port> Connect to new peer
 
-  client verify <fileId> <filepath> 验证文件哈希
+  client verify <fileId> <filepath> Verify file hash
 
-示例:
-  # 启动第一个服务器节点
+Examples:
+  # Start first server node
   node index.js server --http-port 3000 --p2p-port 6000 --data-dir ./data1
 
-  # 启动第二个服务器节点并连接到第一个
+  # Start second server node and connect to first
   node index.js server --http-port 3001 --p2p-port 6001 --data-dir ./data2 --peers localhost:6000
 
-  # 客户端注册文件
-  node index.js client register ./myfile.txt --uploader "Alice" --description "重要文档"
+  # Client register file
+  node index.js client register ./myfile.txt --uploader "Alice" --description "Important document"
 
-  # 客户端下载文件
+  # Client download file
   node index.js client download <file-id> --output ./downloads/
 
-  # 查看文件列表
+  # View file list
   node index.js client list
 `);
 }
@@ -143,7 +143,7 @@ async function startServer(options: CommandOptions): Promise<void> {
 
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║         LocalFileStore - 区块链文件服务器                 ║
+║         LocalFileStore - Blockchain File Server          ║
 ╚══════════════════════════════════════════════════════════╝
 `);
 
