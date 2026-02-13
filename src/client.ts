@@ -151,6 +151,44 @@ interface DownloadFromNetworkResult {
 }
 
 /**
+ * 激励记录
+ */
+interface IncentiveRecord {
+  id: string;
+  type: string;
+  amount: number;
+  timestamp: number;
+  description: string;
+}
+
+/**
+ * 激励账户数据
+ */
+interface IncentiveAccountData {
+  nodeId: string;
+  balance: number;
+  totalEarned: number;
+  totalWithdrawn: number;
+  rewardsByType: Record<string, number>;
+}
+
+/**
+ * 激励统计数据
+ */
+interface IncentiveStatsData {
+  global: {
+    totalIssued: number;
+    totalAccounts: number;
+    topNodes: { nodeId: string; totalEarned: number }[];
+  };
+  local: {
+    nodeId: string;
+    totalEarned: number;
+    currentBalance: number;
+  };
+}
+
+/**
  * HTTP 请求选项
  */
 interface HttpRequestOptions {
@@ -227,26 +265,29 @@ export class FileClient {
   /**
    * 压缩文件夹为ZIP文件
    */
-  private async zipFolder(folderPath: string, zipPath: string): Promise<{ success: boolean; fileCount: number; error?: string }> {
-    return new Promise((resolve) => {
+  private async zipFolder(
+    folderPath: string,
+    zipPath: string
+  ): Promise<{ success: boolean; fileCount: number; error?: string }> {
+    return new Promise(resolve => {
       const output = fs.createWriteStream(zipPath);
       const archive = archiver('zip', { zlib: { level: 9 } });
-      
+
       let fileCount = 0;
-      
+
       output.on('close', () => {
         resolve({ success: true, fileCount });
       });
-      
+
       archive.on('error', (err: Error) => {
         resolve({ success: false, fileCount: 0, error: err.message });
       });
-      
-      archive.on('entry', (entry: archiver.EntryData) => {
+
+      archive.on('entry', () => {
         // Count all entries (files and directories)
         fileCount++;
       });
-      
+
       archive.pipe(output);
       archive.directory(folderPath, false);
       archive.finalize();
@@ -262,34 +303,34 @@ export class FileClient {
     description?: string
   ): Promise<UploadFolderResult> {
     const resolvedPath = path.resolve(folderPath);
-    
+
     if (!fs.existsSync(resolvedPath)) {
       return { success: false, error: `Folder not found: ${folderPath}` };
     }
-    
+
     const stats = fs.statSync(resolvedPath);
     if (!stats.isDirectory()) {
       return { success: false, error: 'Path is not a directory' };
     }
-    
+
     const folderName = path.basename(resolvedPath);
     const zipFilename = `${folderName}.zip`;
     const zipPath = path.join(this.downloadDir, zipFilename);
-    
+
     console.log(`📦 Compressing folder: ${folderName}`);
     console.log(`   Source: ${resolvedPath}`);
-    
+
     // 压缩文件夹
     const zipResult = await this.zipFolder(resolvedPath, zipPath);
-    
+
     if (!zipResult.success) {
       return { success: false, error: `Failed to compress folder: ${zipResult.error}` };
     }
-    
+
     console.log(`   Compressed ${zipResult.fileCount} files`);
     console.log(`   ZIP size: ${this.formatSize(fs.statSync(zipPath).size)}`);
     console.log(`   ZIP location: ${zipPath}\n`);
-    
+
     // 构建描述，标记为文件夹压缩包
     const folderDescription = JSON.stringify({
       type: 'folder_archive',
@@ -297,15 +338,15 @@ export class FileClient {
       fileCount: zipResult.fileCount,
       description: description || '',
     });
-    
+
     // 上传压缩包
     console.log(`📤 Uploading compressed folder...`);
     const uploadResult = await this.registerFile(zipPath, uploader, folderDescription);
-    
+
     if (uploadResult.success) {
       // 可选：上传成功后删除临时ZIP文件
       // fs.unlinkSync(zipPath);
-      
+
       return {
         success: true,
         fileId: uploadResult.fileId,
@@ -652,7 +693,7 @@ export class FileClient {
         return { success: false, error: response.error };
       }
 
-      return { success: true, data: response as any };
+      return { success: true, data: response as unknown as IncentiveAccountData };
     } catch (err) {
       const error = err as ErrorWithMessage;
       return { success: false, error: `Request failed: ${error.message}` };
@@ -711,7 +752,7 @@ export class FileClient {
         return { success: false, error: response.error };
       }
 
-      return { success: true, records: (response as any).records };
+      return { success: true, records: (response as { records: IncentiveRecord[] }).records };
     } catch (err) {
       const error = err as ErrorWithMessage;
       return { success: false, error: `Request failed: ${error.message}` };
@@ -738,10 +779,13 @@ export class FileClient {
 
     console.log(`\n📋 Incentive Records (${records.length} total):\n`);
     console.log('─'.repeat(80));
-    console.log(`${'Type'.padEnd(12)} │ ${'Amount'.padEnd(10)} │ ${'Date'.padEnd(20)} │ Description`);
+    console.log(
+      `${'Type'.padEnd(12)} │ ${'Amount'.padEnd(10)} │ ${'Date'.padEnd(20)} │ Description`
+    );
     console.log('─'.repeat(80));
 
-    for (const record of records.slice(0, 20)) { // 只显示前20条
+    for (const record of records.slice(0, 20)) {
+      // 只显示前20条
       const date = new Date(record.timestamp).toLocaleString();
       const type = record.type.padEnd(12);
       const amount = record.amount.toFixed(2).padEnd(10);
@@ -780,7 +824,7 @@ export class FileClient {
         return { success: false, error: response.error };
       }
 
-      return { success: true, data: response as any };
+      return { success: true, data: response as unknown as IncentiveStatsData };
     } catch (err) {
       const error = err as ErrorWithMessage;
       return { success: false, error: `Request failed: ${error.message}` };
@@ -801,7 +845,7 @@ export class FileClient {
     const { global, local } = result.data;
 
     console.log(`\n📊 Incentive Statistics:\n`);
-    
+
     console.log('Global Stats:');
     console.log(`  Total Issued:    ${global.totalIssued.toFixed(2)} tokens`);
     console.log(`  Total Accounts:  ${global.totalAccounts}\n`);

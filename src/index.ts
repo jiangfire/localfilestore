@@ -256,7 +256,9 @@ async function runClient(options: CommandOptions, positional: string[]): Promise
         console.log(`\n✅ Folder uploaded successfully!`);
         console.log(`   File ID: ${result.fileId}`);
         console.log(`   Files: ${result.originalFileCount}`);
-        console.log(`   Total size: ${result.totalSize ? (result.totalSize / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}`);
+        console.log(
+          `   Total size: ${result.totalSize ? (result.totalSize / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}`
+        );
         console.log(`   ZIP saved at: ${result.zipPath}`);
       }
       break;
@@ -324,7 +326,7 @@ async function runClient(options: CommandOptions, positional: string[]): Promise
     case 'incentive': {
       const incentiveSubCommand = positional[1];
       const nodeId = typeof options.node_id === 'string' ? options.node_id : undefined;
-      
+
       switch (incentiveSubCommand) {
         case 'records':
           await client.showIncentiveRecords(nodeId);

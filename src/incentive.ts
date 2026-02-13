@@ -6,9 +6,9 @@ import * as crypto from 'crypto';
  * 激励类型
  */
 export enum IncentiveType {
-  STORAGE = 'STORAGE',       // 存储奖励
-  BANDWIDTH = 'BANDWIDTH',   // 带宽奖励（提供下载）
-  UPTIME = 'UPTIME',         // 在线时长奖励
+  STORAGE = 'STORAGE', // 存储奖励
+  BANDWIDTH = 'BANDWIDTH', // 带宽奖励（提供下载）
+  UPTIME = 'UPTIME', // 在线时长奖励
   VALIDATION = 'VALIDATION', // 验证奖励（区块验证）
 }
 
@@ -16,48 +16,48 @@ export enum IncentiveType {
  * 激励记录
  */
 export interface IncentiveRecord {
-  id: string;               // 记录ID
-  type: IncentiveType;      // 激励类型
-  nodeId: string;           // 节点ID
-  fileId?: string;          // 相关文件ID（存储/带宽奖励）
-  amount: number;           // 奖励数量
-  timestamp: number;        // 时间戳
-  blockIndex: number;       // 关联的区块索引
-  description: string;      // 描述
+  id: string; // 记录ID
+  type: IncentiveType; // 激励类型
+  nodeId: string; // 节点ID
+  fileId?: string; // 相关文件ID（存储/带宽奖励）
+  amount: number; // 奖励数量
+  timestamp: number; // 时间戳
+  blockIndex: number; // 关联的区块索引
+  description: string; // 描述
 }
 
 /**
  * 节点激励账户
  */
 export interface NodeAccount {
-  nodeId: string;           // 节点ID
-  balance: number;          // 当前余额
-  totalEarned: number;      // 总收益
-  totalWithdrawn: number;   // 总提取
-  lastUpdated: number;      // 最后更新时间
+  nodeId: string; // 节点ID
+  balance: number; // 当前余额
+  totalEarned: number; // 总收益
+  totalWithdrawn: number; // 总提取
+  lastUpdated: number; // 最后更新时间
 }
 
 /**
  * 激励配置
  */
 export interface IncentiveConfig {
-  storageRewardPerMB: number;    // 每MB存储奖励
-  storageRewardPerDay: number;   // 每天存储奖励系数
-  downloadRewardPerMB: number;   // 每MB下载流量奖励
-  uptimeRewardPerHour: number;   // 每小时在线奖励
-  validationReward: number;      // 每次验证奖励
-  minStorageDuration: number;    // 最小存储时间（毫秒）
+  storageRewardPerMB: number; // 每MB存储奖励
+  storageRewardPerDay: number; // 每天存储奖励系数
+  downloadRewardPerMB: number; // 每MB下载流量奖励
+  uptimeRewardPerHour: number; // 每小时在线奖励
+  validationReward: number; // 每次验证奖励
+  minStorageDuration: number; // 最小存储时间（毫秒）
 }
 
 /**
  * 默认激励配置
  */
 export const DEFAULT_INCENTIVE_CONFIG: IncentiveConfig = {
-  storageRewardPerMB: 0.1,       // 每MB存储奖励 0.1 代币
-  storageRewardPerDay: 1.0,      // 每天存储倍数
-  downloadRewardPerMB: 0.05,     // 每MB下载奖励 0.05 代币
-  uptimeRewardPerHour: 10,       // 每小时在线奖励 10 代币
-  validationReward: 5,           // 每次验证奖励 5 代币
+  storageRewardPerMB: 0.1, // 每MB存储奖励 0.1 代币
+  storageRewardPerDay: 1.0, // 每天存储倍数
+  downloadRewardPerMB: 0.05, // 每MB下载奖励 0.05 代币
+  uptimeRewardPerHour: 10, // 每小时在线奖励 10 代币
+  validationReward: 5, // 每次验证奖励 5 代币
   minStorageDuration: 24 * 60 * 60 * 1000, // 最小存储1天
 };
 
@@ -80,7 +80,7 @@ export class IncentiveManager {
     this.config = { ...DEFAULT_INCENTIVE_CONFIG, ...config };
     this.recordsPath = path.join(dataDir, 'incentive-records.json');
     this.accountsPath = path.join(dataDir, 'incentive-accounts.json');
-    
+
     this.loadData();
   }
 
@@ -91,7 +91,7 @@ export class IncentiveManager {
     // 加载记录
     if (fs.existsSync(this.recordsPath)) {
       try {
-        this.records = JSON.parse(fs.readFileSync(this.recordsPath, 'utf-8'));
+        this.records = JSON.parse(fs.readFileSync(this.recordsPath, 'utf-8')) as IncentiveRecord[];
       } catch {
         this.records = [];
       }
@@ -100,7 +100,9 @@ export class IncentiveManager {
     // 加载账户
     if (fs.existsSync(this.accountsPath)) {
       try {
-        const data = JSON.parse(fs.readFileSync(this.accountsPath, 'utf-8'));
+        const data = JSON.parse(fs.readFileSync(this.accountsPath, 'utf-8')) as {
+          accounts?: [string, NodeAccount][];
+        };
         this.accounts = new Map(data.accounts || []);
       } catch {
         this.accounts = new Map();
@@ -174,7 +176,7 @@ export class IncentiveManager {
     this.saveData();
 
     console.log(`[Incentive] Issued ${amount} tokens to ${nodeId} for ${type}`);
-    
+
     return record;
   }
 
@@ -189,9 +191,11 @@ export class IncentiveManager {
     blockIndex: number
   ): IncentiveRecord {
     const sizeMB = fileSize / (1024 * 1024);
-    const amount = sizeMB * this.config.storageRewardPerMB * 
-                   Math.max(1, storageDays * this.config.storageRewardPerDay);
-    
+    const amount =
+      sizeMB *
+      this.config.storageRewardPerMB *
+      Math.max(1, storageDays * this.config.storageRewardPerDay);
+
     return this.issueReward(
       IncentiveType.STORAGE,
       nodeId,
@@ -213,7 +217,7 @@ export class IncentiveManager {
   ): IncentiveRecord {
     const sizeMB = bytesTransferred / (1024 * 1024);
     const amount = sizeMB * this.config.downloadRewardPerMB;
-    
+
     return this.issueReward(
       IncentiveType.BANDWIDTH,
       nodeId,
@@ -229,7 +233,7 @@ export class IncentiveManager {
    */
   recordUptimeReward(nodeId: string, hours: number, blockIndex: number): IncentiveRecord {
     const amount = hours * this.config.uptimeRewardPerHour;
-    
+
     return this.issueReward(
       IncentiveType.UPTIME,
       nodeId,
@@ -259,14 +263,18 @@ export class IncentiveManager {
    */
   calculateUptimeReward(currentBlockIndex: number): IncentiveRecord | null {
     const hoursOnline = (Date.now() - this.uptimeStart) / (60 * 60 * 1000);
-    
+
     if (hoursOnline >= 1) {
-      const record = this.recordUptimeReward(this.localNodeId, Math.floor(hoursOnline), currentBlockIndex);
+      const record = this.recordUptimeReward(
+        this.localNodeId,
+        Math.floor(hoursOnline),
+        currentBlockIndex
+      );
       // 重置计时
       this.uptimeStart = Date.now();
       return record;
     }
-    
+
     return null;
   }
 
@@ -315,7 +323,7 @@ export class IncentiveManager {
   } {
     const account = this.accounts.get(nodeId);
     const nodeRecords = this.getRecordsByNode(nodeId);
-    
+
     const byType: Record<IncentiveType, number> = {
       [IncentiveType.STORAGE]: 0,
       [IncentiveType.BANDWIDTH]: 0,
@@ -374,11 +382,11 @@ export class IncentiveManager {
    */
   withdraw(amount: number): { success: boolean; error?: string } {
     const account = this.getLocalAccount();
-    
+
     if (amount <= 0) {
       return { success: false, error: 'Invalid amount' };
     }
-    
+
     if (account.balance < amount) {
       return { success: false, error: 'Insufficient balance' };
     }
@@ -386,11 +394,11 @@ export class IncentiveManager {
     account.balance -= amount;
     account.totalWithdrawn += amount;
     account.lastUpdated = Date.now();
-    
+
     this.saveData();
-    
+
     console.log(`[Incentive] Withdrawn ${amount} tokens from ${this.localNodeId}`);
-    
+
     return { success: true };
   }
 }

@@ -5,8 +5,8 @@ import * as crypto from 'crypto';
 import * as net from 'net';
 import type { BlockData, FileRecord, Block } from './blockchain';
 import { Blockchain } from './blockchain';
-import { P2PNode, type PeerInfo } from './p2p';
-import { StorageManager, type RedundancyStats, type FileStorageLocation } from './storage-manager';
+import { P2PNode, type PeerInfo, MessageType } from './p2p';
+import { StorageManager } from './storage-manager';
 import { IncentiveManager, IncentiveType, type IncentiveRecord } from './incentive';
 
 /**
@@ -132,15 +132,12 @@ export class FileServer {
     this.p2pNode.onBlockReceived = (block: Block): void => {
       console.log(`[Server] Received new block #${block.index} from peer`);
       this.saveBlockchain();
-      
+
       // 同步文件列表到存储管理器
       this.storageManager.syncWithBlockchain(this.blockchain.chain);
-      
+
       // 发放验证奖励（验证新区块）
-      this.incentiveManager.recordValidationReward(
-        this.p2pNode.getNodeId(),
-        block.index
-      );
+      this.incentiveManager.recordValidationReward(this.p2pNode.getNodeId(), block.index);
     };
 
     this.p2pNode.onFileRequested = (fileId: string, socket: net.Socket): void => {
@@ -148,7 +145,7 @@ export class FileServer {
       if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath);
         this.p2pNode.sendFile(socket, fileId, data);
-        
+
         // 发放带宽奖励
         const block = this.blockchain.findFile(fileId);
         if (block) {
@@ -319,10 +316,7 @@ export class FileServer {
     );
 
     // 发放验证奖励（挖矿奖励）
-    this.incentiveManager.recordValidationReward(
-      this.p2pNode.getNodeId(),
-      newBlock.index
-    );
+    this.incentiveManager.recordValidationReward(this.p2pNode.getNodeId(), newBlock.index);
 
     console.log(`[Server] Registered file: ${filename} (ID: ${fileId})`);
 
@@ -622,7 +616,7 @@ export class FileServer {
     const location = this.storageManager.getFileLocation(fileId);
     if (location) {
       this.p2pNode.broadcast({
-        type: 'STORAGE_INFO' as any,
+        type: MessageType.STORAGE_INFO,
         data: {
           nodeId: this.p2pNode.getNodeId(),
           fileId,
@@ -642,15 +636,17 @@ export class FileServer {
     res: http.ServerResponse
   ): Promise<void> {
     const stats = this.storageManager.getRedundancyStats();
-    
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      stats: {
-        ...stats,
-        atRiskFileCount: stats.atRiskFiles.length,
-      },
-    }));
+    res.end(
+      JSON.stringify({
+        success: true,
+        stats: {
+          ...stats,
+          atRiskFileCount: stats.atRiskFiles.length,
+        },
+      })
+    );
   }
 
   /**
@@ -662,7 +658,7 @@ export class FileServer {
     res: http.ServerResponse
   ): Promise<void> {
     const location = this.storageManager.getFileLocation(fileId);
-    
+
     if (!location) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'File storage info not found' }));
@@ -679,19 +675,21 @@ export class FileServer {
         lastSeen: info?.lastSeen,
       };
     });
-    
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      file: {
-        fileId: location.fileId,
-        filename: location.filename,
-        size: location.size,
-        hash: location.hash,
-        redundancy: location.redundancy,
-        storedOnNodes: nodes,
-      },
-    }));
+    res.end(
+      JSON.stringify({
+        success: true,
+        file: {
+          fileId: location.fileId,
+          filename: location.filename,
+          size: location.size,
+          hash: location.hash,
+          redundancy: location.redundancy,
+          storedOnNodes: nodes,
+        },
+      })
+    );
   }
 
   /**
@@ -703,22 +701,24 @@ export class FileServer {
   ): Promise<void> {
     const nodes = this.storageManager.getAllNodeStorage();
     const localFiles = this.blockchain.getAllFiles();
-    
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      localNodeId: this.p2pNode.getNodeId(),
-      localFileCount: localFiles.length,
-      localStorageSize: nodes.find(n => n.nodeId === this.p2pNode.getNodeId())?.totalSize || 0,
-      nodes: nodes.map(n => ({
-        nodeId: n.nodeId,
-        host: n.host,
-        port: n.port,
-        fileCount: n.fileIds.length,
-        totalSize: n.totalSize,
-        lastSeen: n.lastSeen,
-      })),
-    }));
+    res.end(
+      JSON.stringify({
+        success: true,
+        localNodeId: this.p2pNode.getNodeId(),
+        localFileCount: localFiles.length,
+        localStorageSize: nodes.find(n => n.nodeId === this.p2pNode.getNodeId())?.totalSize || 0,
+        nodes: nodes.map(n => ({
+          nodeId: n.nodeId,
+          host: n.host,
+          port: n.port,
+          fileCount: n.fileIds.length,
+          totalSize: n.totalSize,
+          lastSeen: n.lastSeen,
+        })),
+      })
+    );
   }
 
   /**
@@ -730,19 +730,21 @@ export class FileServer {
   ): Promise<void> {
     const url = new URL(req.url || '/', `http://localhost:${this.config.httpPort}`);
     const nodeId = url.searchParams.get('nodeId') || this.p2pNode.getNodeId();
-    
+
     const stats = this.incentiveManager.getNodeRewardStats(nodeId);
     const account = this.incentiveManager.getAccount(nodeId);
-    
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      nodeId,
-      balance: stats.currentBalance,
-      totalEarned: stats.totalEarned,
-      totalWithdrawn: account?.totalWithdrawn || 0,
-      rewardsByType: stats.byType,
-    }));
+    res.end(
+      JSON.stringify({
+        success: true,
+        nodeId,
+        balance: stats.currentBalance,
+        totalEarned: stats.totalEarned,
+        totalWithdrawn: account?.totalWithdrawn || 0,
+        rewardsByType: stats.byType,
+      })
+    );
   }
 
   /**
@@ -755,9 +757,9 @@ export class FileServer {
     const url = new URL(req.url || '/', `http://localhost:${this.config.httpPort}`);
     const nodeId = url.searchParams.get('nodeId');
     const type = url.searchParams.get('type') as IncentiveType | null;
-    
+
     let records: IncentiveRecord[];
-    
+
     if (nodeId) {
       records = this.incentiveManager.getRecordsByNode(nodeId);
     } else if (type) {
@@ -766,24 +768,26 @@ export class FileServer {
       // 返回本地节点的记录
       records = this.incentiveManager.getRecordsByNode(this.p2pNode.getNodeId());
     }
-    
+
     // 按时间倒序
     records = records.sort((a, b) => b.timestamp - a.timestamp);
-    
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      count: records.length,
-      records: records.map(r => ({
-        id: r.id,
-        type: r.type,
-        amount: r.amount,
-        timestamp: r.timestamp,
-        blockIndex: r.blockIndex,
-        description: r.description,
-        fileId: r.fileId,
-      })),
-    }));
+    res.end(
+      JSON.stringify({
+        success: true,
+        count: records.length,
+        records: records.map(r => ({
+          id: r.id,
+          type: r.type,
+          amount: r.amount,
+          timestamp: r.timestamp,
+          blockIndex: r.blockIndex,
+          description: r.description,
+          fileId: r.fileId,
+        })),
+      })
+    );
   }
 
   /**
@@ -795,21 +799,23 @@ export class FileServer {
   ): Promise<void> {
     const globalStats = this.incentiveManager.getGlobalStats();
     const localStats = this.incentiveManager.getNodeRewardStats(this.p2pNode.getNodeId());
-    
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      success: true,
-      global: globalStats,
-      local: {
-        nodeId: this.p2pNode.getNodeId(),
-        ...localStats,
-      },
-      config: {
-        storageRewardPerMB: this.incentiveManager['config'].storageRewardPerMB,
-        downloadRewardPerMB: this.incentiveManager['config'].downloadRewardPerMB,
-        uptimeRewardPerHour: this.incentiveManager['config'].uptimeRewardPerHour,
-        validationReward: this.incentiveManager['config'].validationReward,
-      },
-    }));
+    res.end(
+      JSON.stringify({
+        success: true,
+        global: globalStats,
+        local: {
+          nodeId: this.p2pNode.getNodeId(),
+          ...localStats,
+        },
+        config: {
+          storageRewardPerMB: this.incentiveManager['config'].storageRewardPerMB,
+          downloadRewardPerMB: this.incentiveManager['config'].downloadRewardPerMB,
+          uptimeRewardPerHour: this.incentiveManager['config'].uptimeRewardPerHour,
+          validationReward: this.incentiveManager['config'].validationReward,
+        },
+      })
+    );
   }
 }

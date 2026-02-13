@@ -15,6 +15,7 @@ export enum MessageType {
   REQUEST_FILE = 'REQUEST_FILE',
   RESPONSE_FILE = 'RESPONSE_FILE',
   PEER_LIST = 'PEER_LIST',
+  STORAGE_INFO = 'STORAGE_INFO',
 }
 
 /**

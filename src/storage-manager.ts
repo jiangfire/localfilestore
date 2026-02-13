@@ -9,9 +9,9 @@ export interface NodeStorageInfo {
   nodeId: string;
   host: string;
   port: number;
-  fileIds: string[];      // 该节点存储的文件ID列表
-  totalSize: number;      // 总存储大小
-  lastSeen: number;       // 最后活跃时间
+  fileIds: string[]; // 该节点存储的文件ID列表
+  totalSize: number; // 总存储大小
+  lastSeen: number; // 最后活跃时间
 }
 
 /**
@@ -22,8 +22,8 @@ export interface FileStorageLocation {
   filename: string;
   size: number;
   hash: string;
-  storedOn: string[];     // 存储该文件的节点ID列表
-  redundancy: number;     // 冗余度（副本数）
+  storedOn: string[]; // 存储该文件的节点ID列表
+  redundancy: number; // 冗余度（副本数）
 }
 
 /**
@@ -36,7 +36,7 @@ export interface RedundancyStats {
   averageRedundancy: number;
   minRedundancy: number;
   maxRedundancy: number;
-  atRiskFiles: string[];  // 冗余度为1的文件（只有一个副本）
+  atRiskFiles: string[]; // 冗余度为1的文件（只有一个副本）
 }
 
 /**
@@ -60,7 +60,10 @@ export class StorageManager {
   private loadIndex(): void {
     if (fs.existsSync(this.storagePath)) {
       try {
-        const data = JSON.parse(fs.readFileSync(this.storagePath, 'utf-8'));
+        const data = JSON.parse(fs.readFileSync(this.storagePath, 'utf-8')) as {
+          nodes?: [string, NodeStorageInfo][];
+          files?: [string, FileStorageLocation][];
+        };
         this.nodeStorageMap = new Map(data.nodes || []);
         this.fileLocationMap = new Map(data.files || []);
       } catch {
@@ -219,7 +222,7 @@ export class StorageManager {
    */
   getRedundancyStats(): RedundancyStats {
     const files = Array.from(this.fileLocationMap.values());
-    
+
     if (files.length === 0) {
       return {
         totalFiles: 0,
@@ -235,7 +238,7 @@ export class StorageManager {
     const redundancies = files.map(f => f.redundancy);
     const totalUniqueSize = files.reduce((sum, f) => sum + f.size, 0);
     const totalReplicatedSize = files.reduce((sum, f) => sum + f.size * f.redundancy, 0);
-    
+
     return {
       totalFiles: files.length,
       totalUniqueSize,
@@ -259,8 +262,7 @@ export class StorageManager {
    * 获取需要增加冗余的文件列表（副本数少于目标值）
    */
   getUnderReplicatedFiles(targetCopies: number = 3): FileStorageLocation[] {
-    return Array.from(this.fileLocationMap.values())
-      .filter(f => f.redundancy < targetCopies);
+    return Array.from(this.fileLocationMap.values()).filter(f => f.redundancy < targetCopies);
   }
 
   /**
