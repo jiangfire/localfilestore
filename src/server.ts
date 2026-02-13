@@ -6,6 +6,8 @@ import * as net from 'net';
 import type { BlockData, FileRecord, Block } from './blockchain';
 import { Blockchain } from './blockchain';
 import { P2PNode, type PeerInfo } from './p2p';
+import { StorageManager, type RedundancyStats, type FileStorageLocation } from './storage-manager';
+import { IncentiveManager, IncentiveType, type IncentiveRecord } from './incentive';
 
 /**
  * 请求体类型
@@ -37,6 +39,8 @@ interface ServerConfig {
 export class FileServer {
   private blockchain: Blockchain;
   private p2pNode: P2PNode;
+  private storageManager: StorageManager;
+  private incentiveManager: IncentiveManager;
   private httpServer: http.Server | null = null;
   private config: ServerConfig;
   private fileStoragePath: string;
@@ -56,6 +60,15 @@ export class FileServer {
 
     // 创建P2P节点
     this.p2pNode = new P2PNode(this.blockchain, config.p2pPort, this.fileStoragePath);
+
+    // 创建存储管理器
+    this.storageManager = new StorageManager(config.dataDir, this.p2pNode.getNodeId());
+
+    // 创建激励管理器
+    this.incentiveManager = new IncentiveManager(config.dataDir, this.p2pNode.getNodeId());
+
+    // 从区块链同步文件列表
+    this.storageManager.syncWithBlockchain(this.blockchain.chain);
 
     // 设置P2P事件处理
     this.setupP2PEvents();
@@ -119,6 +132,15 @@ export class FileServer {
     this.p2pNode.onBlockReceived = (block: Block): void => {
       console.log(`[Server] Received new block #${block.index} from peer`);
       this.saveBlockchain();
+      
+      // 同步文件列表到存储管理器
+      this.storageManager.syncWithBlockchain(this.blockchain.chain);
+      
+      // 发放验证奖励（验证新区块）
+      this.incentiveManager.recordValidationReward(
+        this.p2pNode.getNodeId(),
+        block.index
+      );
     };
 
     this.p2pNode.onFileRequested = (fileId: string, socket: net.Socket): void => {
@@ -126,6 +148,17 @@ export class FileServer {
       if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath);
         this.p2pNode.sendFile(socket, fileId, data);
+        
+        // 发放带宽奖励
+        const block = this.blockchain.findFile(fileId);
+        if (block) {
+          this.incentiveManager.recordBandwidthReward(
+            this.p2pNode.getNodeId(),
+            fileId,
+            data.length,
+            block.index
+          );
+        }
       }
     };
 
@@ -180,6 +213,24 @@ export class FileServer {
         await this.handleGetChain(req, res);
       } else if (pathname === '/api/connect' && req.method === 'POST') {
         await this.handleConnectPeer(req, res);
+      } else if (pathname === '/api/storage/redundancy' && req.method === 'GET') {
+        await this.handleGetRedundancyStats(req, res);
+      } else if (pathname.startsWith('/api/storage/file/') && req.method === 'GET') {
+        const fileId = pathname.split('/')[4];
+        if (fileId) {
+          await this.handleGetFileStorage(fileId, req, res);
+        } else {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing file ID' }));
+        }
+      } else if (pathname === '/api/storage/nodes' && req.method === 'GET') {
+        await this.handleGetNodeStorage(req, res);
+      } else if (pathname === '/api/incentive/account' && req.method === 'GET') {
+        await this.handleGetIncentiveAccount(req, res);
+      } else if (pathname === '/api/incentive/records' && req.method === 'GET') {
+        await this.handleGetIncentiveRecords(req, res);
+      } else if (pathname === '/api/incentive/stats' && req.method === 'GET') {
+        await this.handleGetIncentiveStats(req, res);
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
@@ -251,6 +302,27 @@ export class FileServer {
 
     // 保存区块链
     this.saveBlockchain();
+
+    // 注册本地存储
+    this.storageManager.registerLocalFile(fileRecord);
+
+    // 广播存储信息给对等节点
+    this.broadcastStorageInfo(fileId);
+
+    // 发放存储奖励
+    this.incentiveManager.recordStorageReward(
+      this.p2pNode.getNodeId(),
+      fileId,
+      fileData.length,
+      1, // 至少1天
+      newBlock.index
+    );
+
+    // 发放验证奖励（挖矿奖励）
+    this.incentiveManager.recordValidationReward(
+      this.p2pNode.getNodeId(),
+      newBlock.index
+    );
 
     console.log(`[Server] Registered file: ${filename} (ID: ${fileId})`);
 
@@ -541,5 +613,203 @@ export class FileServer {
       const error = err as ErrorWithMessage;
       console.error('[Server] Failed to save blockchain:', error.message);
     }
+  }
+
+  /**
+   * 广播存储信息给对等节点
+   */
+  private broadcastStorageInfo(fileId: string): void {
+    const location = this.storageManager.getFileLocation(fileId);
+    if (location) {
+      this.p2pNode.broadcast({
+        type: 'STORAGE_INFO' as any,
+        data: {
+          nodeId: this.p2pNode.getNodeId(),
+          fileId,
+          timestamp: Date.now(),
+        },
+        sender: this.p2pNode.getNodeId(),
+        timestamp: Date.now(),
+      });
+    }
+  }
+
+  /**
+   * 处理获取冗余统计请求
+   */
+  private async handleGetRedundancyStats(
+    _req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const stats = this.storageManager.getRedundancyStats();
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      stats: {
+        ...stats,
+        atRiskFileCount: stats.atRiskFiles.length,
+      },
+    }));
+  }
+
+  /**
+   * 处理获取文件存储位置请求
+   */
+  private async handleGetFileStorage(
+    fileId: string,
+    _req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const location = this.storageManager.getFileLocation(fileId);
+    
+    if (!location) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File storage info not found' }));
+      return;
+    }
+
+    // 获取节点详细信息
+    const nodes = location.storedOn.map(nodeId => {
+      const info = this.storageManager.getNodeStorage(nodeId);
+      return {
+        nodeId,
+        host: info?.host || 'unknown',
+        port: info?.port || 0,
+        lastSeen: info?.lastSeen,
+      };
+    });
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      file: {
+        fileId: location.fileId,
+        filename: location.filename,
+        size: location.size,
+        hash: location.hash,
+        redundancy: location.redundancy,
+        storedOnNodes: nodes,
+      },
+    }));
+  }
+
+  /**
+   * 处理获取节点存储信息请求
+   */
+  private async handleGetNodeStorage(
+    _req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const nodes = this.storageManager.getAllNodeStorage();
+    const localFiles = this.blockchain.getAllFiles();
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      localNodeId: this.p2pNode.getNodeId(),
+      localFileCount: localFiles.length,
+      localStorageSize: nodes.find(n => n.nodeId === this.p2pNode.getNodeId())?.totalSize || 0,
+      nodes: nodes.map(n => ({
+        nodeId: n.nodeId,
+        host: n.host,
+        port: n.port,
+        fileCount: n.fileIds.length,
+        totalSize: n.totalSize,
+        lastSeen: n.lastSeen,
+      })),
+    }));
+  }
+
+  /**
+   * 处理获取激励账户请求
+   */
+  private async handleGetIncentiveAccount(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const url = new URL(req.url || '/', `http://localhost:${this.config.httpPort}`);
+    const nodeId = url.searchParams.get('nodeId') || this.p2pNode.getNodeId();
+    
+    const stats = this.incentiveManager.getNodeRewardStats(nodeId);
+    const account = this.incentiveManager.getAccount(nodeId);
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      nodeId,
+      balance: stats.currentBalance,
+      totalEarned: stats.totalEarned,
+      totalWithdrawn: account?.totalWithdrawn || 0,
+      rewardsByType: stats.byType,
+    }));
+  }
+
+  /**
+   * 处理获取激励记录请求
+   */
+  private async handleGetIncentiveRecords(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const url = new URL(req.url || '/', `http://localhost:${this.config.httpPort}`);
+    const nodeId = url.searchParams.get('nodeId');
+    const type = url.searchParams.get('type') as IncentiveType | null;
+    
+    let records: IncentiveRecord[];
+    
+    if (nodeId) {
+      records = this.incentiveManager.getRecordsByNode(nodeId);
+    } else if (type) {
+      records = this.incentiveManager.getRecordsByType(type);
+    } else {
+      // 返回本地节点的记录
+      records = this.incentiveManager.getRecordsByNode(this.p2pNode.getNodeId());
+    }
+    
+    // 按时间倒序
+    records = records.sort((a, b) => b.timestamp - a.timestamp);
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      count: records.length,
+      records: records.map(r => ({
+        id: r.id,
+        type: r.type,
+        amount: r.amount,
+        timestamp: r.timestamp,
+        blockIndex: r.blockIndex,
+        description: r.description,
+        fileId: r.fileId,
+      })),
+    }));
+  }
+
+  /**
+   * 处理获取激励统计请求
+   */
+  private async handleGetIncentiveStats(
+    _req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const globalStats = this.incentiveManager.getGlobalStats();
+    const localStats = this.incentiveManager.getNodeRewardStats(this.p2pNode.getNodeId());
+    
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      global: globalStats,
+      local: {
+        nodeId: this.p2pNode.getNodeId(),
+        ...localStats,
+      },
+      config: {
+        storageRewardPerMB: this.incentiveManager['config'].storageRewardPerMB,
+        downloadRewardPerMB: this.incentiveManager['config'].downloadRewardPerMB,
+        uptimeRewardPerHour: this.incentiveManager['config'].uptimeRewardPerHour,
+        validationReward: this.incentiveManager['config'].validationReward,
+      },
+    }));
   }
 }

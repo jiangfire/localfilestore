@@ -1,4 +1,4 @@
-import { FileServer } from './server';
+﻿import { FileServer } from './server';
 import { FileClient } from './client';
 
 /**
@@ -40,10 +40,11 @@ interface ErrorWithMessage {
  */
 function showHelp(): void {
   console.log(`
-📦 LocalFileStore - Blockchain-based local file sharing system
+📦 localfilestore.js - Blockchain-based local file sharing system
 
 Usage:
-  node index.js <command> [options]
+  node localfilestore.js <command> [options]
+  or: npx localfilestore.js <command> [options]
 
 Commands:
 
@@ -64,6 +65,10 @@ Commands:
     --uploader <name>       Uploader name
     --description <text>    File description
 
+  client upload-folder <path>  Upload folder (will be compressed to ZIP)
+    --uploader <name>       Uploader name
+    --description <text>    Folder description
+
   client download <fileId>  Download file
     --output <path>         Output path (default: download directory)
 
@@ -75,21 +80,38 @@ Commands:
 
   client verify <fileId> <filepath> Verify file hash
 
+  client incentive              View your incentive account
+    --node-id <id>              View specific node's account
+
+  client incentive records      View incentive records
+    --node-id <id>              View specific node's records
+
+  client incentive stats        View incentive statistics
+
 Examples:
   # Start first server node
-  node index.js server --http-port 3000 --p2p-port 6000 --data-dir ./data1
+  node localfilestore.js server --http-port 3000 --p2p-port 6000 --data-dir ./data1
 
   # Start second server node and connect to first
-  node index.js server --http-port 3001 --p2p-port 6001 --data-dir ./data2 --peers localhost:6000
+  node localfilestore.js server --http-port 3001 --p2p-port 6001 --data-dir ./data2 --peers localhost:6000
 
   # Client register file
-  node index.js client register ./myfile.txt --uploader "Alice" --description "Important document"
+  node localfilestore.js client register ./myfile.txt --uploader "Alice" --description "Important document"
+
+  # Client upload folder (auto-compressed to ZIP)
+  node localfilestore.js client upload-folder ./myfolder --uploader "Alice" --description "Project files"
 
   # Client download file
-  node index.js client download <file-id> --output ./downloads/
+  node localfilestore.js client download <file-id> --output ./downloads/
 
   # View file list
-  node index.js client list
+  node localfilestore.js client list
+
+  # View incentive account
+  node localfilestore.js client incentive
+
+  # View incentive statistics
+  node localfilestore.js client incentive stats
 `);
 }
 
@@ -143,7 +165,7 @@ async function startServer(options: CommandOptions): Promise<void> {
 
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║         LocalFileStore - Blockchain File Server          ║
+║         localfilestore.js - Blockchain File Server          ║
 ╚══════════════════════════════════════════════════════════╝
 `);
 
@@ -216,6 +238,30 @@ async function runClient(options: CommandOptions, positional: string[]): Promise
       break;
     }
 
+    case 'upload-folder': {
+      const folderPath = positional[1];
+      if (!folderPath) {
+        console.error('❌ Error: Please specify a folder path');
+        process.exit(1);
+      }
+      const result = await client.uploadFolder(
+        folderPath,
+        typeof options.uploader === 'string' ? options.uploader : undefined,
+        typeof options.description === 'string' ? options.description : undefined
+      );
+      if (!result.success) {
+        console.error(`❌ Error: ${result.error || 'Unknown error'}`);
+        process.exit(1);
+      } else {
+        console.log(`\n✅ Folder uploaded successfully!`);
+        console.log(`   File ID: ${result.fileId}`);
+        console.log(`   Files: ${result.originalFileCount}`);
+        console.log(`   Total size: ${result.totalSize ? (result.totalSize / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}`);
+        console.log(`   ZIP saved at: ${result.zipPath}`);
+      }
+      break;
+    }
+
     case 'download': {
       const fileId = positional[1];
       if (!fileId) {
@@ -271,6 +317,24 @@ async function runClient(options: CommandOptions, positional: string[]): Promise
       if (!result.success) {
         console.error(`❌ Error: ${result.error || 'Unknown error'}`);
         process.exit(1);
+      }
+      break;
+    }
+
+    case 'incentive': {
+      const incentiveSubCommand = positional[1];
+      const nodeId = typeof options.node_id === 'string' ? options.node_id : undefined;
+      
+      switch (incentiveSubCommand) {
+        case 'records':
+          await client.showIncentiveRecords(nodeId);
+          break;
+        case 'stats':
+          await client.showIncentiveStats();
+          break;
+        default:
+          await client.showIncentiveAccount(nodeId);
+          break;
       }
       break;
     }

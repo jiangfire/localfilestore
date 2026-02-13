@@ -1,9 +1,9 @@
-# LocalFileStore - 基于区块链的本地文件共享系统
+﻿# localfilestore.js - 基于区块链的本地文件共享系统
 
 一个去中心化的本地文件注册与分发系统，采用类区块链技术维护文件账本，支持多节点P2P网络同步。
 
-[![CI](https://github.com/yourusername/localfilestore/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/localfilestore/actions/workflows/ci.yml)
-[![Tests](https://github.com/yourusername/localfilestore/actions/workflows/test.yml/badge.svg)](https://github.com/yourusername/localfilestore/actions/workflows/test.yml)
+[![CI](https://github.com/yourusername/localfilestore.js/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/localfilestore.js/actions/workflows/ci.yml)
+[![Tests](https://github.com/yourusername/localfilestore.js/actions/workflows/test.yml/badge.svg)](https://github.com/yourusername/localfilestore.js/actions/workflows/test.yml)
 
 ## 特性
 
@@ -16,17 +16,19 @@
 
 ## 快速下载
 
-从 [GitHub Actions Artifacts](https://github.com/yourusername/localfilestore/actions) 下载最新的 `index.js`：
+从 [GitHub Actions Artifacts](https://github.com/yourusername/localfilestore.js/actions) 下载最新的 `localfilestore.js`：
 
 ```bash
 # 下载后直接使用
-node index.js --help
+node localfilestore.js --help
+# 或使用短命令
+npx localfilestore.js --help
 ```
 
 ## 项目结构
 
 ```
-localfilestore/
+localfilestore.js/
 ├── src/
 │   ├── index.ts      # 命令行入口
 │   ├── blockchain.ts # 区块链核心模块
@@ -36,7 +38,7 @@ localfilestore/
 ├── tests/
 │   └── blockchain.test.ts  # 单元测试
 ├── dist/
-│   └── index.js      # ncc打包后的单文件(~33KB)
+│   └── localfilestore.js  # ncc打包后的单文件(~33KB)
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -82,10 +84,10 @@ npm run format
 
 ```bash
 # 启动第一个节点（种子节点）
-node dist/index.js server --http-port 3000 --p2p-port 6000 --data-dir ./data1
+node dist/localfilestore.js server --http-port 3000 --p2p-port 6000 --data-dir ./data1
 
 # 启动第二个节点并连接到第一个节点
-node dist/index.js server --http-port 3001 --p2p-port 6001 --data-dir ./data2 --peers localhost:6000
+node dist/localfilestore.js server --http-port 3001 --p2p-port 6001 --data-dir ./data2 --peers localhost:6000
 ```
 
 服务器参数:
@@ -99,47 +101,47 @@ node dist/index.js server --http-port 3001 --p2p-port 6001 --data-dir ./data2 --
 #### 注册文件
 
 ```bash
-node dist/index.js client register ./myfile.txt --uploader "Alice" --description "重要文档"
+node dist/localfilestore.js client register ./myfile.txt --uploader "Alice" --description "重要文档"
 ```
 
 #### 列出所有文件
 
 ```bash
-node dist/index.js client list
+node dist/localfilestore.js client list
 ```
 
 #### 下载文件
 
 ```bash
 # 下载到默认目录
-node dist/index.js client download <file-id>
+node dist/localfilestore.js client download <file-id>
 
 # 指定输出路径
-node dist/index.js client download <file-id> --output ./downloads/myfile.txt
+node dist/localfilestore.js client download <file-id> --output ./downloads/myfile.txt
 ```
 
 #### 查看区块链
 
 ```bash
-node dist/index.js client chain
+node dist/localfilestore.js client chain
 ```
 
 #### 查看网络节点
 
 ```bash
-node dist/index.js client peers
+node dist/localfilestore.js client peers
 ```
 
 #### 连接到新节点
 
 ```bash
-node dist/index.js client connect localhost:6001
+node dist/localfilestore.js client connect localhost:6001
 ```
 
 #### 验证文件哈希
 
 ```bash
-node dist/index.js client verify <file-id> ./myfile.txt
+node dist/localfilestore.js client verify <file-id> ./myfile.txt
 ```
 
 ### 客户端通用参数

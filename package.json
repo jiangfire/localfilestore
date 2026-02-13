@@ -2,17 +2,18 @@
   "name": "localfilestore",
   "version": "1.0.0",
   "description": "Blockchain-based local file sharing system",
-  "main": "dist/index.js",
+  "main": "dist/localfilestore.js",
   "bin": {
-    "localfilestore": "dist/index.js"
+    "localfilestore": "dist/localfilestore.js",
+    "lfs": "dist/localfilestore.js"
   },
   "scripts": {
     "build": "tsc",
-    "bundle": "ncc build src/index.ts -o dist --minify --license licenses.txt",
+    "bundle": "ncc build src/index.ts -o dist --minify --license licenses.txt && powershell -Command \"Move-Item -Force dist/index.js dist/localfilestore.js\"",
     "dev:server": "ts-node src/index.ts server",
     "dev:client": "ts-node src/index.ts client",
-    "start:server": "node dist/index.js server",
-    "start:client": "node dist/index.js client",
+    "start:server": "node dist/localfilestore.js server",
+    "start:client": "node dist/localfilestore.js client",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -49,5 +50,9 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1"
   }
 }

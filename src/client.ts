@@ -2,6 +2,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import archiver from 'archiver';
 import type { PeerInfo } from './p2p';
 
 /**
@@ -71,6 +72,19 @@ interface ErrorWithMessage {
 interface RegisterFileResult {
   success: boolean;
   fileId?: string;
+  hash?: string;
+  error?: string;
+}
+
+/**
+ * 上传文件夹结果
+ */
+interface UploadFolderResult {
+  success: boolean;
+  fileId?: string;
+  zipPath?: string;
+  originalFileCount?: number;
+  totalSize?: number;
   error?: string;
 }
 
@@ -200,13 +214,111 @@ export class FileClient {
         console.log(`   File ID: ${response.fileId}`);
         console.log(`   Block: #${response.blockIndex}`);
         console.log(`   Hash: ${response.hash}`);
-        return { success: true, fileId: response.fileId };
+        return { success: true, fileId: response.fileId, hash: response.hash };
       } else {
         return { success: false, error: response.error };
       }
     } catch (err) {
       const error = err as ErrorWithMessage;
       return { success: false, error: `Request failed: ${error.message}` };
+    }
+  }
+
+  /**
+   * 压缩文件夹为ZIP文件
+   */
+  private async zipFolder(folderPath: string, zipPath: string): Promise<{ success: boolean; fileCount: number; error?: string }> {
+    return new Promise((resolve) => {
+      const output = fs.createWriteStream(zipPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      
+      let fileCount = 0;
+      
+      output.on('close', () => {
+        resolve({ success: true, fileCount });
+      });
+      
+      archive.on('error', (err: Error) => {
+        resolve({ success: false, fileCount: 0, error: err.message });
+      });
+      
+      archive.on('entry', (entry: archiver.EntryData) => {
+        // Count all entries (files and directories)
+        fileCount++;
+      });
+      
+      archive.pipe(output);
+      archive.directory(folderPath, false);
+      archive.finalize();
+    });
+  }
+
+  /**
+   * 上传文件夹（自动压缩为ZIP后上传）
+   */
+  async uploadFolder(
+    folderPath: string,
+    uploader?: string,
+    description?: string
+  ): Promise<UploadFolderResult> {
+    const resolvedPath = path.resolve(folderPath);
+    
+    if (!fs.existsSync(resolvedPath)) {
+      return { success: false, error: `Folder not found: ${folderPath}` };
+    }
+    
+    const stats = fs.statSync(resolvedPath);
+    if (!stats.isDirectory()) {
+      return { success: false, error: 'Path is not a directory' };
+    }
+    
+    const folderName = path.basename(resolvedPath);
+    const zipFilename = `${folderName}.zip`;
+    const zipPath = path.join(this.downloadDir, zipFilename);
+    
+    console.log(`📦 Compressing folder: ${folderName}`);
+    console.log(`   Source: ${resolvedPath}`);
+    
+    // 压缩文件夹
+    const zipResult = await this.zipFolder(resolvedPath, zipPath);
+    
+    if (!zipResult.success) {
+      return { success: false, error: `Failed to compress folder: ${zipResult.error}` };
+    }
+    
+    console.log(`   Compressed ${zipResult.fileCount} files`);
+    console.log(`   ZIP size: ${this.formatSize(fs.statSync(zipPath).size)}`);
+    console.log(`   ZIP location: ${zipPath}\n`);
+    
+    // 构建描述，标记为文件夹压缩包
+    const folderDescription = JSON.stringify({
+      type: 'folder_archive',
+      originalFolderName: folderName,
+      fileCount: zipResult.fileCount,
+      description: description || '',
+    });
+    
+    // 上传压缩包
+    console.log(`📤 Uploading compressed folder...`);
+    const uploadResult = await this.registerFile(zipPath, uploader, folderDescription);
+    
+    if (uploadResult.success) {
+      // 可选：上传成功后删除临时ZIP文件
+      // fs.unlinkSync(zipPath);
+      
+      return {
+        success: true,
+        fileId: uploadResult.fileId,
+        zipPath,
+        originalFileCount: zipResult.fileCount,
+        totalSize: fs.statSync(zipPath).size,
+      };
+    } else {
+      // 上传失败，清理临时文件
+      if (fs.existsSync(zipPath)) {
+        fs.unlinkSync(zipPath);
+      }
+      return { success: false, error: uploadResult.error };
     }
   }
 
@@ -516,6 +628,197 @@ export class FileClient {
     console.log(`   Result: ${valid ? '✅ VALID' : '❌ INVALID'}\n`);
 
     return { success: true, valid };
+  }
+
+  /**
+   * 查询激励账户
+   */
+  async viewIncentiveAccount(nodeId?: string): Promise<{
+    success: boolean;
+    data?: {
+      nodeId: string;
+      balance: number;
+      totalEarned: number;
+      totalWithdrawn: number;
+      rewardsByType: Record<string, number>;
+    };
+    error?: string;
+  }> {
+    try {
+      const path = nodeId ? `/api/incentive/account?nodeId=${nodeId}` : '/api/incentive/account';
+      const response = await this.get(path);
+
+      if (response.error) {
+        return { success: false, error: response.error };
+      }
+
+      return { success: true, data: response as any };
+    } catch (err) {
+      const error = err as ErrorWithMessage;
+      return { success: false, error: `Request failed: ${error.message}` };
+    }
+  }
+
+  /**
+   * 显示激励账户（格式化输出）
+   */
+  async showIncentiveAccount(nodeId?: string): Promise<void> {
+    const result = await this.viewIncentiveAccount(nodeId);
+
+    if (!result.success || !result.data) {
+      console.error(`❌ Error: ${result.error}`);
+      return;
+    }
+
+    const data = result.data;
+
+    console.log(`\n💰 Incentive Account:
+`);
+    console.log(`Node ID:        ${data.nodeId}`);
+    console.log(`Current Balance: ${data.balance.toFixed(2)} tokens`);
+    console.log(`Total Earned:    ${data.totalEarned.toFixed(2)} tokens`);
+    console.log(`Total Withdrawn: ${data.totalWithdrawn.toFixed(2)} tokens\n`);
+
+    console.log('Rewards by Type:');
+    console.log('─'.repeat(40));
+    for (const [type, amount] of Object.entries(data.rewardsByType)) {
+      if (amount > 0) {
+        console.log(`  ${type.padEnd(12)}: ${amount.toFixed(2)} tokens`);
+      }
+    }
+    console.log('─'.repeat(40));
+  }
+
+  /**
+   * 查询激励记录
+   */
+  async viewIncentiveRecords(nodeId?: string): Promise<{
+    success: boolean;
+    records?: {
+      id: string;
+      type: string;
+      amount: number;
+      timestamp: number;
+      description: string;
+    }[];
+    error?: string;
+  }> {
+    try {
+      const path = nodeId ? `/api/incentive/records?nodeId=${nodeId}` : '/api/incentive/records';
+      const response = await this.get(path);
+
+      if (response.error) {
+        return { success: false, error: response.error };
+      }
+
+      return { success: true, records: (response as any).records };
+    } catch (err) {
+      const error = err as ErrorWithMessage;
+      return { success: false, error: `Request failed: ${error.message}` };
+    }
+  }
+
+  /**
+   * 显示激励记录（格式化输出）
+   */
+  async showIncentiveRecords(nodeId?: string): Promise<void> {
+    const result = await this.viewIncentiveRecords(nodeId);
+
+    if (!result.success || !result.records) {
+      console.error(`❌ Error: ${result.error}`);
+      return;
+    }
+
+    const records = result.records;
+
+    if (records.length === 0) {
+      console.log('\n📭 No incentive records found.\n');
+      return;
+    }
+
+    console.log(`\n📋 Incentive Records (${records.length} total):\n`);
+    console.log('─'.repeat(80));
+    console.log(`${'Type'.padEnd(12)} │ ${'Amount'.padEnd(10)} │ ${'Date'.padEnd(20)} │ Description`);
+    console.log('─'.repeat(80));
+
+    for (const record of records.slice(0, 20)) { // 只显示前20条
+      const date = new Date(record.timestamp).toLocaleString();
+      const type = record.type.padEnd(12);
+      const amount = record.amount.toFixed(2).padEnd(10);
+      console.log(`${type} │ ${amount} │ ${date.padEnd(20)} │ ${record.description}`);
+    }
+
+    if (records.length > 20) {
+      console.log(`\n... and ${records.length - 20} more records`);
+    }
+    console.log('─'.repeat(80));
+  }
+
+  /**
+   * 查询激励统计
+   */
+  async viewIncentiveStats(): Promise<{
+    success: boolean;
+    data?: {
+      global: {
+        totalIssued: number;
+        totalAccounts: number;
+        topNodes: { nodeId: string; totalEarned: number }[];
+      };
+      local: {
+        nodeId: string;
+        totalEarned: number;
+        currentBalance: number;
+      };
+    };
+    error?: string;
+  }> {
+    try {
+      const response = await this.get('/api/incentive/stats');
+
+      if (response.error) {
+        return { success: false, error: response.error };
+      }
+
+      return { success: true, data: response as any };
+    } catch (err) {
+      const error = err as ErrorWithMessage;
+      return { success: false, error: `Request failed: ${error.message}` };
+    }
+  }
+
+  /**
+   * 显示激励统计（格式化输出）
+   */
+  async showIncentiveStats(): Promise<void> {
+    const result = await this.viewIncentiveStats();
+
+    if (!result.success || !result.data) {
+      console.error(`❌ Error: ${result.error}`);
+      return;
+    }
+
+    const { global, local } = result.data;
+
+    console.log(`\n📊 Incentive Statistics:\n`);
+    
+    console.log('Global Stats:');
+    console.log(`  Total Issued:    ${global.totalIssued.toFixed(2)} tokens`);
+    console.log(`  Total Accounts:  ${global.totalAccounts}\n`);
+
+    console.log('Top Earners:');
+    console.log('─'.repeat(60));
+    for (let i = 0; i < Math.min(5, global.topNodes.length); i++) {
+      const node = global.topNodes[i];
+      const shortId = node.nodeId.substring(0, 16) + '...';
+      console.log(`  #${i + 1} ${shortId.padEnd(22)} ${node.totalEarned.toFixed(2)} tokens`);
+    }
+    console.log('─'.repeat(60));
+
+    console.log('\nYour Stats:');
+    console.log(`  Node ID:      ${local.nodeId}`);
+    console.log(`  Total Earned: ${local.totalEarned.toFixed(2)} tokens`);
+    console.log(`  Balance:      ${local.currentBalance.toFixed(2)} tokens\n`);
   }
 
   /**
