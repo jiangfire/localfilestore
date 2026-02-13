@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "bundle": "ncc build src/index.ts -o dist --minify --license licenses.txt && powershell -Command \"Move-Item -Force dist/index.js dist/localfilestore.js\"",
+    "bundle": "ncc build src/index.ts -o dist --minify --license licenses.txt",
     "dev:server": "ts-node src/index.ts server",
     "dev:client": "ts-node src/index.ts client",
     "start:server": "node dist/localfilestore.js server",
